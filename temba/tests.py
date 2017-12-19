@@ -5,8 +5,9 @@ import inspect
 import json
 import os
 import pytz
-import regex
 import redis
+import regex
+import requests
 import shutil
 import string
 import six
@@ -223,6 +224,21 @@ class TembaTest(SmartminTest):
 
         # reset our simulation to False
         Contact.set_simulation(False)
+
+        self.prevent_external_calls()
+
+    def prevent_external_calls(self):
+        """
+        Prevents calls to external servers by patching the requests library
+        """
+        real_request_func = requests.Session.request
+
+        def request_wrapper(*args, **kwargs):
+            if not kwargs['url'].startswith(mock_server.base_url):
+                raise ValueError("Calls to external servers are disallowed during tests")
+            return real_request_func(*args, **kwargs)
+
+        requests.Session.request = request_wrapper
 
     def create_inbound_msgs(self, recipient, count):
         for m in range(count):
