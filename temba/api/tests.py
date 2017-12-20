@@ -209,8 +209,7 @@ class WebHookTest(TembaTest):
 
         self.assertAllRequestsMade()
 
-    @patch('requests.Session.send')
-    def test_flow_event(self, mock_send):
+    def test_flow_event(self):
         self.setupChannel()
 
         org = self.channel.org
@@ -230,7 +229,7 @@ class WebHookTest(TembaTest):
         sms = self.create_msg(contact=self.joe, direction='I', status='H', text="Mauve",
                               attachments=["image/jpeg:http://s3.com/text.jpg", "audio/mp4:http://s3.com/text.mp4"])
 
-        mock_send.return_value = MockResponse(200, "{}")
+        mocked_request = self.mockRequest('POST', '/webhook.php', "{}")
         Flow.find_and_handle(sms)
 
         # should have one event created
@@ -245,14 +244,7 @@ class WebHookTest(TembaTest):
         self.assertEqual(200, result.status_code)
         self.assertEqual(self.joe, result.contact)
 
-        self.assertTrue(mock_send.called)
-
-        args = mock_send.call_args_list[0][0]
-        prepared_request = args[0]
-        self.assertIn(self.channel.org.get_webhook_url(), prepared_request.url)
-
-        data = parse_qs(prepared_request.body)
-
+        data = mocked_request.data
         self.assertEqual(data['channel'], [str(self.channel.id)])
         self.assertEqual(data['channel_uuid'], [self.channel.uuid])
         self.assertEqual(data['step'], [actionset.uuid])
@@ -272,6 +264,8 @@ class WebHookTest(TembaTest):
         self.assertEqual(values[0]['text'], 'Mauve')
         self.assertTrue(values[0]['time'])
         self.assertTrue(data['time'])
+
+        self.assertAllRequestsMade()
 
     @patch('temba.api.models.time.time')
     def test_webhook_result_timing(self, mock_time):
