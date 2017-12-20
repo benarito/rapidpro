@@ -102,9 +102,9 @@ class WebHookTest(TembaTest):
 
     def setupChannel(self):
         org = self.channel.org
-        org.webhook = u'{"url": "http://fake.com/webhook.php"}'
+        org.webhook = json.dumps({"url": "http://localhost:49999/webhook.php"})
         org.webhook_events = ALL_EVENTS
-        org.save()
+        org.save(update_fields=('webhook', 'webhook_events'))
 
         self.channel.address = "+250788123123"
         self.channel.save()
@@ -121,50 +121,43 @@ class WebHookTest(TembaTest):
 
         self.setupChannel()
 
-        with patch('requests.Session.send') as mock:
-            # clear out which events we listen for, we still shouldnt be notified though we have a webhook
-            self.channel.org.webhook_events = 0
-            self.channel.org.save()
+        # clear out which events we listen for, we still shouldnt be notified though we have a webhook
+        self.channel.org.webhook_events = 0
+        self.channel.org.save()
 
-            mock.return_value = MockResponse(200, "Hello World")
-
-            # trigger an event, shouldnn't fire as we don't have a webhook
-            WebHookEvent.trigger_call_event(call)
-            self.assertFalse(WebHookEvent.objects.all())
+        # trigger an event, shouldnn't fire as we don't have a webhook
+        WebHookEvent.trigger_call_event(call)
+        self.assertFalse(WebHookEvent.objects.all())
 
         self.setupChannel()
 
-        with patch('requests.Session.send') as mock:
-            mock.return_value = MockResponse(200, "Hello World")
+        mocked_request = self.mockRequest('POST', '/webhook.php', "Hello World")
 
-            # trigger an event
-            WebHookEvent.trigger_call_event(call)
-            event = WebHookEvent.objects.get()
+        # trigger an event
+        WebHookEvent.trigger_call_event(call)
+        event = WebHookEvent.objects.get()
 
-            self.assertEqual('C', event.status)
-            self.assertEqual(1, event.try_count)
-            self.assertFalse(event.next_attempt)
+        self.assertEqual('C', event.status)
+        self.assertEqual(1, event.try_count)
+        self.assertFalse(event.next_attempt)
 
-            result = WebHookResult.objects.get()
-            self.assertIn("Event delivered successfully", result.message)
-            self.assertIn("not JSON", result.message)
-            self.assertEqual(200, result.status_code)
-            self.assertEqual("Hello World", result.body)
+        result = WebHookResult.objects.get()
+        self.assertIn("Event delivered successfully", result.message)
+        self.assertIn("not JSON", result.message)
+        self.assertEqual(200, result.status_code)
+        self.assertEqual("Hello World", result.body)
 
-            self.assertTrue(mock.called)
-            args = mock.call_args_list[0][0]
-            prepared_request = args[0]
-            self.assertEqual(self.channel.org.get_webhook_url(), prepared_request.url)
+        data = mocked_request.data
+        self.assertEqual('+250788123123', data['phone'][0])
+        self.assertEqual(six.text_type(self.joe.get_urn(TEL_SCHEME)), data['urn'][0])
+        self.assertEqual(self.joe.uuid, data['contact'][0])
+        self.assertEqual(self.joe.name, data['contact_name'][0])
+        self.assertEqual(call.pk, int(data['call'][0]))
+        self.assertEqual(call.event_type, data['event'][0])
+        self.assertTrue('occurred_on' in data)
+        self.assertEqual(self.channel.pk, int(data['channel'][0]))
 
-            data = parse_qs(prepared_request.body)
-            self.assertEqual('+250788123123', data['phone'][0])
-            self.assertEqual(six.text_type(self.joe.get_urn(TEL_SCHEME)), data['urn'][0])
-            self.assertEqual(self.joe.uuid, data['contact'][0])
-            self.assertEqual(self.joe.name, data['contact_name'][0])
-            self.assertEqual(call.pk, int(data['call'][0]))
-            self.assertEqual(call.event_type, data['event'][0])
-            self.assertTrue('occurred_on' in data)
-            self.assertEqual(self.channel.pk, int(data['channel'][0]))
+        self.assertAllRequestsMade()
 
     def test_alarm_deliveries(self):
         sync_event = SyncEvent.objects.create(channel=self.channel,
@@ -180,48 +173,41 @@ class WebHookTest(TembaTest):
 
         self.setupChannel()
 
-        with patch('requests.Session.send') as mock:
-            # clear out which events we listen for, we still shouldnt be notified though we have a webhook
-            self.channel.org.webhook_events = 0
-            self.channel.org.save()
+        # clear out which events we listen for, we still shouldnt be notified though we have a webhook
+        self.channel.org.webhook_events = 0
+        self.channel.org.save()
 
-            mock.return_value = MockResponse(200, "Hello World")
-
-            # trigger an event, shouldnn't fire as we don't have a webhook
-            WebHookEvent.trigger_channel_alarm(sync_event)
-            self.assertFalse(WebHookEvent.objects.all())
+        # trigger an event, shouldnn't fire as we don't have a webhook
+        WebHookEvent.trigger_channel_alarm(sync_event)
+        self.assertFalse(WebHookEvent.objects.all())
 
         self.setupChannel()
 
-        with patch('requests.Session.send') as mock:
-            mock.return_value = MockResponse(200, "")
+        mocked_request = self.mockRequest('POST', '/webhook.php', "")
 
-            # trigger an event
-            WebHookEvent.trigger_channel_alarm(sync_event)
-            event = WebHookEvent.objects.get()
+        # trigger an event
+        WebHookEvent.trigger_channel_alarm(sync_event)
+        event = WebHookEvent.objects.get()
 
-            self.assertEqual('C', event.status)
-            self.assertEqual(1, event.try_count)
-            self.assertFalse(event.next_attempt)
+        self.assertEqual('C', event.status)
+        self.assertEqual(1, event.try_count)
+        self.assertFalse(event.next_attempt)
 
-            result = WebHookResult.objects.get()
-            self.assertIn("Event delivered successfully", result.message)
-            self.assertEqual(200, result.status_code)
-            self.assertEqual("", result.body)
+        result = WebHookResult.objects.get()
+        self.assertIn("Event delivered successfully", result.message)
+        self.assertEqual(200, result.status_code)
+        self.assertEqual("", result.body)
 
-            self.assertTrue(mock.called)
-            args = mock.call_args_list[0][0]
-            prepared_request = args[0]
-            self.assertEqual(self.channel.org.get_webhook_url(), prepared_request.url)
+        data = mocked_request.data
+        self.assertEqual(self.channel.pk, int(data['channel'][0]))
+        self.assertEqual(85, int(data['power_level'][0]))
+        self.assertEqual('AC', data['power_source'][0])
+        self.assertEqual('CHARGING', data['power_status'][0])
+        self.assertEqual('WIFI', data['network_type'][0])
+        self.assertEqual(5, int(data['pending_message_count'][0]))
+        self.assertEqual(4, int(data['retry_message_count'][0]))
 
-            data = parse_qs(prepared_request.body)
-            self.assertEqual(self.channel.pk, int(data['channel'][0]))
-            self.assertEqual(85, int(data['power_level'][0]))
-            self.assertEqual('AC', data['power_source'][0])
-            self.assertEqual('CHARGING', data['power_status'][0])
-            self.assertEqual('WIFI', data['network_type'][0])
-            self.assertEqual(5, int(data['pending_message_count'][0]))
-            self.assertEqual(4, int(data['retry_message_count'][0]))
+        self.assertAllRequestsMade()
 
     @patch('requests.Session.send')
     def test_flow_event(self, mock_send):

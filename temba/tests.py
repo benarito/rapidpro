@@ -225,11 +225,11 @@ class TembaTest(SmartminTest):
         # reset our simulation to False
         Contact.set_simulation(False)
 
-        self.prevent_external_calls()
+        self.prevent_external_requests()
 
-    def prevent_external_calls(self):
+    def prevent_external_requests(self):
         """
-        Prevents calls to external servers by patching the requests library
+        Prevents requests to external servers by patching the requests library
         """
         real_request_func = requests.Session.request
 
