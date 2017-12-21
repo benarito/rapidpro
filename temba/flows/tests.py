@@ -22,7 +22,7 @@ from django.test.utils import override_settings
 from django.utils import timezone
 
 from temba.airtime.models import AirtimeTransfer
-from temba.api.models import WebHookEvent, Resthook
+from temba.api.models import WebHookEvent, WebHookResult, Resthook
 from temba.channels.models import Channel, ChannelEvent
 from temba.contacts.models import Contact, ContactGroup, ContactField, ContactURN, URN, TEL_SCHEME
 from temba.ivr.models import IVRCall
@@ -4277,6 +4277,8 @@ class FlowsTest(FlowFileTest):
         self.assertEqual("Hey, so should I send it as a ruleset too?", self.send_message(flow, "tornado"))
         self.assertEqual("Great work.", self.send_message(flow, "yes"))
 
+        msg = Msg.objects.all().order_by('-id').first()
+
         def assert_payload(payload, path_length, result_count, results):
             self.assertEqual(dict(name='Ben Haggerty', uuid=self.contact.uuid), payload['contact'])
             self.assertEqual(dict(name='Webhook Payload Test', uuid=flow.uuid), payload['flow'])
@@ -4284,8 +4286,19 @@ class FlowsTest(FlowFileTest):
             self.assertEqual(path_length, len(payload['path']))
             self.assertEqual(result_count, len(payload['results']))
 
+            # make sure things don't sneak into our path format unintentionally
+            # first item in the path should have node, arrived, and exit
+            self.assertEqual(3, len(payload['path'][0]))
+
+            # last item has the same, but no exit
+            self.assertEqual(2, len(payload['path'][-1]))
+
             for key, value in six.iteritems(results):
-                self.assertEqual(value, payload['results'].get(key).get('value'))
+                result = payload['results'].get(key)
+                self.assertEqual(value, result.get('value'))
+
+                # make sure nothing sneaks into our result format unintentionally
+                self.assertEqual(6, len(result))
 
         # we arrived at our ruleset webhook first
         assert_payload(ruleset_post.data, 5, 2, dict(age="39", disaster="tornado"))
@@ -4294,6 +4307,11 @@ class FlowsTest(FlowFileTest):
         # gets shouldn't have payloads
         self.assertIsNone(action_get.data)
         self.assertIsNone(ruleset_get.data)
+
+        # make sure triggering without a url fails properly
+        WebHookEvent.trigger_flow_webhook(FlowRun.objects.get(), None, '', msg)
+        result = WebHookResult.objects.all().order_by('-id').first()
+        self.assertIn('No webhook_url specified, skipping send', result.message)
 
     def test_validate_flow_definition(self):
 

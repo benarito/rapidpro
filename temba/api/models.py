@@ -224,8 +224,8 @@ class WebHookEvent(SmartModel):
         post_data = {}
         post_data['flow'] = dict(name=flow.name, uuid=flow.uuid)
         post_data['contact'] = dict(uuid=contact.uuid, name=contact.name)
-        post_data['path'] = json.loads(run.path if run.path else '[]')
-        post_data['results'] = json.loads(run.results if run.results else '{}')
+        post_data['path'] = run.get_path()
+        post_data['results'] = run.get_results()
         if channel:
             post_data['channel'] = dict(name=channel.name, uuid=channel.uuid)
 
@@ -247,7 +247,7 @@ class WebHookEvent(SmartModel):
         try:
             # no url, bail!
             if not webhook_url:
-                raise Exception("No webhook_url specified, skipping send")
+                raise ValueError("No webhook_url specified, skipping send")
 
             # only send webhooks when we are configured to, otherwise fail
             if settings.SEND_WEBHOOKS:
@@ -297,7 +297,7 @@ class WebHookEvent(SmartModel):
             message = "Error calling webhook: %s" % six.text_type(e)
 
         finally:
-            webhook_event.save()
+            webhook_event.save(update_fields=('status',))
 
             # make sure our message isn't too long
             if message:
@@ -315,7 +315,7 @@ class WebHookEvent(SmartModel):
                                                   status_code=status_code,
                                                   body=body,
                                                   message=message,
-                                                  data=urlencode(post_data, doseq=True),
+                                                  data=json.dumps(post_data),
                                                   request_time=request_time,
                                                   created_by=api_user,
                                                   modified_by=api_user)
@@ -328,7 +328,7 @@ class WebHookEvent(SmartModel):
         return result
 
     @classmethod
-    def trigger_flow_webhook_legacy(cls, run, webhook_url, node_uuid, msg, action='POST', resthook=None, headers=None):
+    def trigger_flow_webhook_legacy(cls, run, webhook_url, node_uuid, msg, action='POST', resthook=None, headers=None):  # pragma: no cover
         flow = run.flow
         org = flow.org
         contact = run.contact
