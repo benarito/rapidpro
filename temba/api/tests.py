@@ -549,17 +549,23 @@ class WebHookTest(TembaTest):
         WebHookResult.objects.all().delete()
 
         # add a webhook header to the org
-        self.channel.org.webhook = u'{"url": "http://fake.com/webhook.php", "headers": {"X-My-Header": "foobar", "Authorization": "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="}, "method": "POST"}'
+        self.channel.org.webhook = json.dumps({
+            "url": "http://localhost:49999/webhook.php",
+            "headers": {
+                "X-My-Header": "foobar",
+                "Authorization": "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=="
+            }, "method": "POST"
+        })
         self.channel.org.save()
 
         # check that our webhook settings have saved
-        self.assertEqual('http://fake.com/webhook.php', self.channel.org.get_webhook_url())
-        self.assertDictEqual({
+        self.assertEqual(self.channel.org.get_webhook_url(), 'http://localhost:49999/webhook.php')
+        self.assertDictEqual(self.channel.org.get_webhook_headers(), {
             'X-My-Header':
             'foobar',
             'Authorization':
             'Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ=='
-        }, self.channel.org.get_webhook_headers())
+        })
 
         self.mockRequest('POST', '/webhook.php', "Boom")
 
@@ -570,6 +576,8 @@ class WebHookTest(TembaTest):
         # both headers should be in the json-encoded url string
         self.assertIn('X-My-Header: foobar', result.request)
         self.assertIn('Authorization: Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==', result.request)
+
+        self.assertAllRequestsMade()
 
     @override_settings(SEND_WEBHOOKS=True)
     def test_webhook(self):

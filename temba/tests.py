@@ -524,7 +524,8 @@ class TembaTest(SmartminTest):
 
     def assertAllRequestsMade(self):
         if self.mock_server.mocked_requests:
-            self.fail("test has %d unused mock requests: %s" % (len(mock_server.mocked_requests), mock_server.mocked_requests))
+            reqs = [six.text_type(r) for r in mock_server.mocked_requests]
+            self.fail("test has %d unused mock requests: %s" % (len(mock_server.mocked_requests), ", ".join(reqs)))
 
     def assertExcelRow(self, sheet, row_num, values, tz=None):
         """
