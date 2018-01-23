@@ -136,6 +136,7 @@ class TembaTestRunner(DiscoverRunner):
     """
     def __init__(self, *args, **kwargs):
         settings.TESTING = True
+        mock_server.start()
 
         super(TembaTestRunner, self).__init__(*args, **kwargs)
 
@@ -152,8 +153,6 @@ class TembaTestRunner(DiscoverRunner):
         return suite
 
     def run_suite(self, suite, **kwargs):
-        mock_server.start()
-
         return super(TembaTestRunner, self).run_suite(suite, **kwargs)
 
 
