@@ -17,7 +17,7 @@
               "quick_replies": [], 
               "media": {}, 
               "msg": {
-                "eng": "What is your favorite color? @step.value"
+                "eng": "Started by @parent.contact.name. What is your favorite color?"
               }, 
               "send_all": false, 
               "type": "reply", 
@@ -123,10 +123,10 @@
       ], 
       "metadata": {
         "expires": 10080, 
-        "saved_on": "2018-01-22T22:23:08.809653Z", 
+        "saved_on": "2018-01-27T00:59:40.975488Z", 
         "uuid": "e1fa3c52-3616-499e-b1be-c759f4645247", 
         "name": "Favorite Color", 
-        "revision": 21
+        "revision": 22
       }
     }, 
     {
@@ -237,10 +237,10 @@
             {
               "quick_replies": [], 
               "media": {
-                "eng": "image:http://textit.in/static?name=@contact.name"
+                "eng": "image:http://textit.in/static?gender=@contact.gender"
               }, 
               "msg": {
-                "eng": "Thanks @contact.name, I've let the boss know that you are @(LOWER(contact.gender))."
+                "eng": "Thanks @contact.name, you are @(LOWER(contact.gender))."
               }, 
               "send_all": false, 
               "type": "reply", 
@@ -248,12 +248,19 @@
             }, 
             {
               "uuid": "0b387b74-cf44-461d-9970-054c5892eecf", 
-              "contacts": [], 
-              "variables": [
+              "contacts": [
                 {
-                  "id": "@new_contact"
+                  "urns": [
+                    {
+                      "priority": 50, 
+                      "path": "+12065552121",
+                      "scheme": "tel"
+                    }
+                  ], 
+                  "name": "Oprah Winfrey"
                 }
               ], 
+              "variables": [], 
               "flow": {
                 "name": "Favorite Color", 
                 "uuid": "e1fa3c52-3616-499e-b1be-c759f4645247"
@@ -307,11 +314,11 @@
           "destination": "10d41071-dd84-42a5-b579-430c52774d1f", 
           "actions": [
             {
-              "field": "tel_e164", 
+              "field": "telegram", 
               "type": "save", 
               "uuid": "fc9d70f8-a58b-448b-88ff-9ede42629c1e", 
-              "value": "+12065558888", 
-              "label": "Phone Number"
+              "value": "12345", 
+              "label": "Telegram identifier"
             }, 
             {
               "quick_replies": [], 
@@ -406,20 +413,6 @@
           ]
         }, 
         {
-          "uuid": "2c8883fc-3954-41db-b9fc-263610df46c5", 
-          "exit_uuid": "0823caec-5886-4228-a7ed-f6efa00dce11", 
-          "y": 372, 
-          "x": 786, 
-          "destination": "10d41071-dd84-42a5-b579-430c52774d1f", 
-          "actions": [
-            {
-              "type": "del_group", 
-              "uuid": "4696ddfd-6e70-4caf-b660-b1eab237fcef", 
-              "groups": []
-            }
-          ]
-        }, 
-        {
           "uuid": "cc7b4519-ffba-4ed4-b890-7b3fce72274f", 
           "exit_uuid": "fa1a0571-dec0-47a8-b0da-4eb33d0a0e32", 
           "y": 203, 
@@ -427,21 +420,21 @@
           "destination": "10d41071-dd84-42a5-b579-430c52774d1f", 
           "actions": [
             {
-              "msg": "Hi there, my name is @contact.name.", 
+              "msg": "Hi there, my name is @contact.name.",
               "type": "email", 
               "uuid": "431b0c69-cc9f-4017-b667-0823e5017d3e", 
               "emails": [
                 "support@website.com"
               ], 
-              "subject": "Message from @contact.name"
+              "subject": "Message \n from\t@contact.name"
             }
           ]
         }, 
         {
           "uuid": "bbd23b5b-5d63-4628-a2e9-db0ab769a4e1", 
           "exit_uuid": "b799a83e-cf15-4a02-8a01-5bde65464edc", 
-          "y": 462, 
-          "x": 933, 
+          "y": 128, 
+          "x": 1075, 
           "destination": "10d41071-dd84-42a5-b579-430c52774d1f", 
           "actions": [
             {
@@ -455,8 +448,8 @@
         {
           "uuid": "0d87510f-bef9-4016-a762-d5db79573d5d", 
           "exit_uuid": "daaa6804-d7f3-4a4a-8dca-755f2de73840", 
-          "y": 592, 
-          "x": 1011, 
+          "y": 590, 
+          "x": 934, 
           "destination": "10d41071-dd84-42a5-b579-430c52774d1f", 
           "actions": [
             {
@@ -701,21 +694,6 @@
             }, 
             {
               "category": {
-                "eng": "Removeall"
-              }, 
-              "uuid": "7472b4f4-1c7f-43dd-a899-d4fdbad857a5", 
-              "destination": "2c8883fc-3954-41db-b9fc-263610df46c5", 
-              "label": null, 
-              "destination_type": "A", 
-              "test": {
-                "test": {
-                  "eng": "removeall"
-                }, 
-                "type": "contains_any"
-              }
-            }, 
-            {
-              "category": {
                 "eng": "Email"
               }, 
               "uuid": "87b73c31-5ada-4a83-849d-0d303c120c01", 
@@ -725,21 +703,6 @@
               "test": {
                 "test": {
                   "eng": "email"
-                }, 
-                "type": "contains_any"
-              }
-            }, 
-            {
-              "category": {
-                "eng": "Spanish"
-              }, 
-              "uuid": "06ff4571-6c69-4bb4-82fc-db8d8a0293ac", 
-              "destination": "bbd23b5b-5d63-4628-a2e9-db0ab769a4e1", 
-              "label": null, 
-              "destination_type": "A", 
-              "test": {
-                "test": {
-                  "eng": "spanish"
                 }, 
                 "type": "contains_any"
               }
@@ -761,12 +724,57 @@
             }, 
             {
               "category": {
+                "eng": "Spanish"
+              }, 
+              "uuid": "06ff4571-6c69-4bb4-82fc-db8d8a0293ac", 
+              "destination": "bbd23b5b-5d63-4628-a2e9-db0ab769a4e1", 
+              "label": null, 
+              "destination_type": "A", 
+              "test": {
+                "test": {
+                  "eng": "spanish"
+                }, 
+                "type": "contains_any"
+              }
+            }, 
+            {
+              "category": {
+                "eng": "Removeall"
+              }, 
+              "uuid": "7472b4f4-1c7f-43dd-a899-d4fdbad857a5", 
+              "destination": null, 
+              "label": null, 
+              "destination_type": null, 
+              "test": {
+                "test": {
+                  "eng": "removeall"
+                }, 
+                "type": "contains_any"
+              }
+            }, 
+            {
+              "category": {
+                "eng": "Telegram"
+              }, 
+              "uuid": "4256c40b-dc17-4ce5-bc09-5ee018da3321", 
+              "destination": null, 
+              "label": null, 
+              "destination_type": null, 
+              "test": {
+                "test": {
+                  "eng": "telegram"
+                }, 
+                "type": "contains_any"
+              }
+            }, 
+            {
+              "category": {
                 "eng": "Other"
               }, 
               "uuid": "6d62342a-62e8-4082-afdf-cb36e0aa9f80", 
-              "destination": "10d41071-dd84-42a5-b579-430c52774d1f", 
+              "destination": null, 
               "label": null, 
-              "destination_type": "A", 
+              "destination_type": null, 
               "test": {
                 "type": "true"
               }
@@ -816,8 +824,8 @@
           "operand": "@step.value", 
           "finished_key": null, 
           "response_type": "", 
-          "y": 305, 
-          "x": 1084, 
+          "y": 374, 
+          "x": 1034, 
           "config": {
             "flow": {
               "name": "Favorite Color", 
@@ -831,8 +839,8 @@
         "notes": [], 
         "expires": 10080, 
         "name": "Action Packed", 
-        "saved_on": "2018-01-22T22:36:50.050315Z", 
-        "revision": 205
+        "saved_on": "2018-01-27T00:59:15.403038Z", 
+        "revision": 229
       }
     }
   ], 
