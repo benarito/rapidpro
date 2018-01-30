@@ -48,7 +48,7 @@ from .models import (
     GtTest, GteTest, BetweenTest, ContainsOnlyPhraseTest, ContainsPhraseTest, DateEqualTest, DateAfterTest,
     DateBeforeTest, DateTest, StartsWithTest, ContainsTest, ContainsAnyTest, RegexTest, NotEmptyTest, HasStateTest,
     HasDistrictTest, HasWardTest, HasEmailTest, SendAction, AddLabelAction, AddToGroupAction, ReplyAction,
-    SaveToContactAction, SetLanguageAction, SetChannelAction, StartFlowAction,
+    SetLanguageAction, SetChannelAction,
     DeleteFromGroupAction, WebhookAction, ActionLog, VariableContactAction, UssdAction, FlowPathRecentRun,
     FlowUserConflictException, FlowVersionConflictException, FlowInvalidCycleException, FlowNodeCount
 )
@@ -2844,10 +2844,29 @@ class ActionPackedTest(FlowFileTest):
             self.update_action_field(self.flow, '431b0c69-cc9f-4017-b667-0823e5017d3e', 'emails', [])
 
     @rerun_with_flowserver
+    def test_update_reserved_keys(self):
+        NAME = '0afb91da-9eb7-4e11-9cd8-ae01952c1153'
+        # throw exception for other reserved words except name and first_name
+        for word in Contact.RESERVED_FIELDS:
+            if word not in ['name', 'first_name', 'tel_e164'] + list(URN.VALID_SCHEMES):
+                with self.assertRaises(ValueError):
+                    action = self.get_action_json(self.flow, NAME)
+                    action['label'] = word
+                    action['field'] = word
+                    action['value'] = ''
+                    self.update_action_json(self.flow, action)
+
+    # TODO: @rerun_with_flowserver
     def test_update_contact(self):
 
         GENDER = '8492be2d-b6d1-4b1e-a15e-a7d1fa3a0671'
         NAME = '0afb91da-9eb7-4e11-9cd8-ae01952c1153'
+
+        def update_save_fields(action, label, value):
+            action['label'] = label
+            action['field'] = ContactField.make_key(label)
+            action['value'] = value
+            return action
 
         # boring field updates
         self.start_flow()
@@ -2861,24 +2880,11 @@ class ActionPackedTest(FlowFileTest):
         self.assertEqual(None, Contact.objects.get(id=self.contact.id).get_field_raw('gender'))
 
         # test setting just the first name
-        action = self.get_action_json(self.flow, NAME)
-        action['label'] = 'First Name'
-        action['field'] = 'first_name'
-        action['value'] = 'Frank'
+        action = update_save_fields(self.get_action_json(self.flow, NAME), 'First Name', 'Frank')
         self.update_action_json(self.flow, action)
         self.start_flow()
         self.contact.refresh_from_db()
         self.assertEqual("Frank Anastasio", self.contact.name)
-
-        # throw exception for other reserved words except name and first_name
-        for word in Contact.RESERVED_FIELDS:
-            if word not in ['name', 'first_name', 'tel_e164'] + list(URN.VALID_SCHEMES):
-                with self.assertRaises(ValueError):
-                    action = self.get_action_json(self.flow, NAME)
-                    action['label'] = word
-                    action['field'] = word
-                    action['value'] = ''
-                    self.update_action_json(self.flow, action)
 
         # we should strip whitespace
         self.update_action_field(self.flow, NAME, 'value', ' Jackson ')
@@ -2896,86 +2902,102 @@ class ActionPackedTest(FlowFileTest):
 
         # test saving something really long to a new field
         action = self.get_action_json(self.flow, GENDER)
-        action['label'] = 'Last Message'
-        action['field'] = 'last_message'
-        action['value'] = 'This is a long message, longer than 160 characters, longer than 250 characters, all the way up ' \
-                          'to 500 some characters long because sometimes people save entire messages to their contact ' \
-                          'fields and we want to enable that for them so that they can do what they want with the platform.'
+        action = update_save_fields(action, 'Last Message',
+                                    'This is a long message, longer than 160 characters, longer '
+                                    'than 250 characters, all the way up to 500 some characters '
+                                    'long because sometimes people save entire messages to their '
+                                    'contact fields and we want to enable that for them so that '
+                                    'they can do what they want with the platform.')
+
         self.update_action_json(self.flow, action)
         self.start_flow()
         self.assertEqual(action['value'], self.contact.get_field('last_message').string_value)
 
-        # # test saving a contact's phone number
-        # test = SaveToContactAction.from_json(self.org, dict(type='save', label='Phone Number', field='tel_e164', value='@step'))
-        #
-        # # make sure they have a twitter urn first
-        # contact.urns.add(ContactURN.create(self.org, None, 'twitter:enewcomer'))
-        # self.assertIsNotNone(contact.urns.filter(path='enewcomer').first())
-        #
-        # # add another phone number to make sure it doesn't get removed too
-        # contact.urns.add(ContactURN.create(self.org, None, 'tel:+18005551212'))
-        # self.assertEqual(3, contact.urns.all().count())
-        #
-        # # create an inbound message on our original phone number
-        # sms = self.create_msg(direction=INCOMING, contact=self.contact,
-        #                       text="+12065551212", contact_urn=contact.urns.filter(path='+250788382382').first())
-        #
-        # # create another contact with that phone number, to test stealing
-        # robbed = self.create_contact("Robzor", "+12065551212")
-        #
-        # self.execute_action(test, run, sms)
-        #
-        # # updating Phone Number should not create a contact field
-        # self.assertIsNone(ContactField.objects.filter(org=self.org, key='tel_e164').first())
-        #
-        # # instead it should update the tel urn for our contact
-        # contact = Contact.objects.get(id=self.contact.pk)
-        # self.assertEqual(4, contact.urns.all().count())
-        # self.assertIsNotNone(contact.urns.filter(path='+12065551212').first())
-        #
-        # # we should still have our twitter scheme
-        # self.assertIsNotNone(contact.urns.filter(path='enewcomer').first())
-        #
-        # # and our other phone number
-        # self.assertIsNotNone(contact.urns.filter(path='+18005551212').first())
-        #
-        # # and our original number too
-        # self.assertIsNotNone(contact.urns.filter(path='+250788382382').first())
-        #
-        # # robzor shouldn't have a number anymore
-        # self.assertFalse(robbed.urns.all())
-        #
-        # # try the same with a simulator contact
-        # test_contact = Contact.get_test_contact(self.admin)
-        # test_contact_urn = test_contact.urns.all().first()
-        # run = FlowRun.create(self.flow, test_contact)
-        # self.execute_action(test, run, sms)
-        #
-        # ActionLog.objects.all().delete()
-        # action = SaveToContactAction.from_json(self.org, dict(type='save', label="mailto", value='foo@bar.com'))
-        # self.execute_action(action, run, None)
-        # self.assertEqual(ActionLog.objects.get().text, "Added foo@bar.com as @contact.mailto - skipped in simulator")
-        #
-        # # Invalid email
-        # ActionLog.objects.all().delete()
-        # action = SaveToContactAction.from_json(self.org, dict(type='save', label="mailto", value='foobar.com'))
-        # self.execute_action(action, run, None)
-        # self.assertEqual(ActionLog.objects.get().text, "Contact not updated, invalid connection for contact (mailto:foobar.com)")
-        #
-        # # URN should be unchanged on the simulator contact
-        # test_contact = Contact.objects.get(id=test_contact.id)
-        # self.assertEqual(test_contact_urn, test_contact.urns.all().first())
-        #
-        # self.assertFalse(ContactField.objects.filter(org=self.org, label='Ecole'))
-        # SaveToContactAction.from_json(self.org, dict(type='save', label="[_NEW_]Ecole", value='@step'))
-        # field = ContactField.objects.get(org=self.org, key="ecole")
-        # self.assertEqual("Ecole", field.label)
-        #
-        # # try saving some empty data into mailto
-        # ActionLog.objects.all().delete()
-        # action = SaveToContactAction.from_json(self.org, dict(type='save', label="mailto", value='@contact.mailto'))
-        # self.execute_action(action, run, None)
-        # self.assertEqual(ActionLog.objects.get().text, "Contact not updated, missing connection for contact")
+    # TODO: @rerun_with_flowserver
+    def test_add_phone_number(self):
+
+        NAME = '0afb91da-9eb7-4e11-9cd8-ae01952c1153'
+
+        # test saving a contact's phone number
+        action = self.get_action_json(self.flow, NAME)
+        action['label'] = 'Phone Number'
+        action['field'] = 'tel_e164'
+        action['value'] = '+12065551212'
+        self.update_action_json(self.flow, action)
+
+        # make sure they have a twitter urn first
+        self.contact.urns.add(ContactURN.create(self.org, None, 'twitter:enewcomer'))
+        self.assertIsNotNone(self.contact.urns.filter(path='enewcomer').first())
+
+        # add another phone number to make sure it doesn't get removed too
+        self.contact.urns.add(ContactURN.create(self.org, None, 'tel:+18005551212'))
+        self.assertEqual(3, self.contact.urns.all().count())
+
+        # create an inbound message on our original phone number
+        self.create_msg(direction=INCOMING, contact=self.contact,
+                        text="+12065551212", contact_urn=self.contact.urns.filter(path='+250788382382').first())
+
+        # create another contact with that phone number, to test stealing
+        robbed = self.create_contact("Robzor", "+12065551212")
+        self.start_flow()
+
+        # updating Phone Number should not create a contact field
+        self.assertIsNone(ContactField.objects.filter(org=self.org, key='tel_e164').first())
+
+        # instead it should update the tel urn for our contact
+        self.contact = Contact.objects.get(id=self.contact.pk)
+        self.assertEqual(4, self.contact.urns.all().count())
+        self.assertIsNotNone(self.contact.urns.filter(path='+12065551212').first())
+
+        # we should still have our twitter scheme
+        self.assertIsNotNone(self.contact.urns.filter(path='enewcomer').first())
+
+        # and our other phone number
+        self.assertIsNotNone(self.contact.urns.filter(path='+18005551212').first())
+
+        # and our original number too
+        self.assertIsNotNone(self.contact.urns.filter(path='+12065552020').first())
+
+        # robzor shouldn't have a number anymore
+        self.assertFalse(robbed.urns.all())
+
+    # TODO: @rerun_with_flowserver
+    def test_save_contact_simulator_messages(self):
+
+        action = self.get_action_json(self.flow, '0afb91da-9eb7-4e11-9cd8-ae01952c1153')
+        Contact.set_simulation(True)
+        test_contact = Contact.get_test_contact(self.admin)
+        test_contact_urn = test_contact.urns.all().first()
+
+        def test_with_save(label, value):
+            action['label'] = label
+            action['field'] = ContactField.make_key(label)
+            action['value'] = value
+            self.update_action_json(self.flow, action)
+
+            ActionLog.objects.all().delete()
+            self.flow.start([], [test_contact], restart_participants=True)
+            self.send('Trey Anastasio', test_contact)
+            self.send('Male', test_contact)
+
+        # valid email
+        test_with_save('mailto', 'foo@bar.com')
+        self.assertEqual(ActionLog.objects.all().order_by('id')[3].text,
+                         'Added foo@bar.com as @contact.mailto - skipped in simulator')
+
+        # invalid email
+        test_with_save('mailto', 'foobar.com')
+        self.assertEqual(ActionLog.objects.all().order_by('id')[3].text,
+                         'Contact not updated, invalid connection for contact (mailto:foobar.com)')
+
+        # URN should be unchanged on the simulator contact
+        test_contact = Contact.objects.get(id=test_contact.id)
+        self.assertEqual(test_contact_urn, test_contact.urns.all().first())
+
+        # try saving some empty data into mailto
+        test_with_save('mailto', '@contact.mailto')
+        self.assertEqual(ActionLog.objects.all().order_by('id')[3].text,
+                         'Contact not updated, missing connection for contact')
 
 
 class ActionTest(FlowFileTest):
@@ -3121,150 +3143,6 @@ class ActionTest(FlowFileTest):
         groups = VariableContactAction.parse_groups(self.org, groups)
         self.assertTrue('Missing', groups[0].name)
 
-    def test_save_to_contact_action(self):
-        sms = self.create_msg(direction=INCOMING, contact=self.contact, text="batman")
-        test = SaveToContactAction.from_json(self.org, dict(type='save', label="Superhero Name", value='@step'))
-        run = FlowRun.create(self.flow, self.contact)
-
-        field = ContactField.objects.get(org=self.org, key="superhero_name")
-        self.assertEqual("Superhero Name", field.label)
-
-        self.execute_action(test, run, sms)
-
-        # user should now have a nickname field with a value of batman
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual("batman", contact.get_field_raw('superhero_name'))
-
-        # test clearing our value
-        test = SaveToContactAction.from_json(self.org, test.as_json())
-        test.value = ""
-        self.execute_action(test, run, sms)
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual(None, contact.get_field_raw('superhero_name'))
-
-        # test setting our name
-        test = SaveToContactAction.from_json(self.org, dict(type='save', label="Name", value='', field='name'))
-        test.value = "Eric Newcomer"
-        self.execute_action(test, run, sms)
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual("Eric Newcomer", contact.name)
-        run.contact = contact
-
-        # test setting just the first name
-        test = SaveToContactAction.from_json(self.org, dict(type='save', label="First Name", value='', field='first_name'))
-        test.value = "Jen"
-        self.execute_action(test, run, sms)
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual("Jen Newcomer", contact.name)
-
-        # throw exception for other reserved words except name and first_name
-        for word in Contact.RESERVED_FIELDS:
-            if word not in ['name', 'first_name', 'tel_e164'] + list(URN.VALID_SCHEMES):
-                with self.assertRaises(Exception):
-                    test = SaveToContactAction.from_json(self.org, dict(type='save', label=word, value='', field=word))
-                    test.value = "Jen"
-                    self.execute_action(test, run, sms)
-
-        # we should strip whitespace
-        run.contact = contact
-        test = SaveToContactAction.from_json(self.org, dict(type='save', label="First Name", value='', field='first_name'))
-        test.value = " Jackson "
-        self.execute_action(test, run, sms)
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual("Jackson Newcomer", contact.name)
-
-        # first name works with a single word
-        run.contact = contact
-        contact.name = "Percy"
-        contact.save()
-
-        test = SaveToContactAction.from_json(self.org, dict(type='save', label="First Name", value='', field='first_name'))
-        test.value = " Cole"
-        self.execute_action(test, run, sms)
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual("Cole", contact.name)
-
-        # test saving something really long to another field
-        test = SaveToContactAction.from_json(self.org, dict(type='save', label="Last Message", value='', field='last_message'))
-        test.value = "This is a long message, longer than 160 characters, longer than 250 characters, all the way up "\
-                     "to 500 some characters long because sometimes people save entire messages to their contact " \
-                     "fields and we want to enable that for them so that they can do what they want with the platform."
-        self.execute_action(test, run, sms)
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual(test.value, contact.get_field('last_message').string_value)
-
-        # test saving a contact's phone number
-        test = SaveToContactAction.from_json(self.org, dict(type='save', label='Phone Number', field='tel_e164', value='@step'))
-
-        # make sure they have a twitter urn first
-        contact.urns.add(ContactURN.create(self.org, None, 'twitter:enewcomer'))
-        self.assertIsNotNone(contact.urns.filter(path='enewcomer').first())
-
-        # add another phone number to make sure it doesn't get removed too
-        contact.urns.add(ContactURN.create(self.org, None, 'tel:+18005551212'))
-        self.assertEqual(3, contact.urns.all().count())
-
-        # create an inbound message on our original phone number
-        sms = self.create_msg(direction=INCOMING, contact=self.contact,
-                              text="+12065551212", contact_urn=contact.urns.filter(path='+250788382382').first())
-
-        # create another contact with that phone number, to test stealing
-        robbed = self.create_contact("Robzor", "+12065551212")
-
-        self.execute_action(test, run, sms)
-
-        # updating Phone Number should not create a contact field
-        self.assertIsNone(ContactField.objects.filter(org=self.org, key='tel_e164').first())
-
-        # instead it should update the tel urn for our contact
-        contact = Contact.objects.get(id=self.contact.pk)
-        self.assertEqual(4, contact.urns.all().count())
-        self.assertIsNotNone(contact.urns.filter(path='+12065551212').first())
-
-        # we should still have our twitter scheme
-        self.assertIsNotNone(contact.urns.filter(path='enewcomer').first())
-
-        # and our other phone number
-        self.assertIsNotNone(contact.urns.filter(path='+18005551212').first())
-
-        # and our original number too
-        self.assertIsNotNone(contact.urns.filter(path='+250788382382').first())
-
-        # robzor shouldn't have a number anymore
-        self.assertFalse(robbed.urns.all())
-
-        # try the same with a simulator contact
-        test_contact = Contact.get_test_contact(self.admin)
-        test_contact_urn = test_contact.urns.all().first()
-        run = FlowRun.create(self.flow, test_contact)
-        self.execute_action(test, run, sms)
-
-        ActionLog.objects.all().delete()
-        action = SaveToContactAction.from_json(self.org, dict(type='save', label="mailto", value='foo@bar.com'))
-        self.execute_action(action, run, None)
-        self.assertEqual(ActionLog.objects.get().text, "Added foo@bar.com as @contact.mailto - skipped in simulator")
-
-        # Invalid email
-        ActionLog.objects.all().delete()
-        action = SaveToContactAction.from_json(self.org, dict(type='save', label="mailto", value='foobar.com'))
-        self.execute_action(action, run, None)
-        self.assertEqual(ActionLog.objects.get().text, "Contact not updated, invalid connection for contact (mailto:foobar.com)")
-
-        # URN should be unchanged on the simulator contact
-        test_contact = Contact.objects.get(id=test_contact.id)
-        self.assertEqual(test_contact_urn, test_contact.urns.all().first())
-
-        self.assertFalse(ContactField.objects.filter(org=self.org, label='Ecole'))
-        SaveToContactAction.from_json(self.org, dict(type='save', label="[_NEW_]Ecole", value='@step'))
-        field = ContactField.objects.get(org=self.org, key="ecole")
-        self.assertEqual("Ecole", field.label)
-
-        # try saving some empty data into mailto
-        ActionLog.objects.all().delete()
-        action = SaveToContactAction.from_json(self.org, dict(type='save', label="mailto", value='@contact.mailto'))
-        self.execute_action(action, run, None)
-        self.assertEqual(ActionLog.objects.get().text, "Contact not updated, missing connection for contact")
-
     def test_set_language_action(self):
         action = SetLanguageAction(str(uuid4()), 'kli', 'Klingon')
 
@@ -3288,29 +3166,6 @@ class ActionTest(FlowFileTest):
 
         # should clear the contacts language
         self.assertIsNone(Contact.objects.get(pk=self.contact.pk).language)
-
-    def test_start_flow_action(self):
-        self.flow.name = 'Parent'
-        self.flow.save()
-
-        self.flow.start([], [self.contact])
-
-        sms = Msg.create_incoming(self.channel, "tel:+250788382382", "Blue is my favorite")
-
-        run = FlowRun.objects.get()
-
-        new_flow = Flow.create_single_message(self.org, self.user,
-                                              {'base': "You chose @parent.color.category"}, base_language='base')
-        action = StartFlowAction(str(uuid4()), new_flow)
-
-        action_json = action.as_json()
-        action = StartFlowAction.from_json(self.org, action_json)
-
-        self.execute_action(action, run, sms, started_flows=[])
-
-        # our contact should now be in the flow
-        self.assertTrue(FlowRun.objects.filter(flow=new_flow, contact=self.contact))
-        self.assertTrue(Msg.objects.filter(contact=self.contact, direction='O', text='You chose Blue'))
 
     def test_group_actions(self):
         msg = self.create_msg(direction=INCOMING, contact=self.contact, text="Green is my favorite")

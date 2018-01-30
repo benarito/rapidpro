@@ -496,7 +496,7 @@ class Contact(TembaModel):
     LANGUAGE = 'language'
     PHONE = 'phone'
     UUID = 'uuid'
-    CONTACT_UUID = 'contact uuid'
+    CONTACT_UUID = 'contact uuid'  # TODO: should this be contact_uuid?
     GROUPS = 'groups'
     ID = 'id'
 
